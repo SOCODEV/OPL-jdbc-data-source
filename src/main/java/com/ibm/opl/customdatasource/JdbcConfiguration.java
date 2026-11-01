@@ -8,8 +8,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.w3c.dom.*;
+import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
+import com.ibm.opl.customdatasource.JdbcConfiguration.OutputParameters;
+
+import javax.xml.XMLConstants;
 import javax.xml.parsers.*;
 import java.io.*;
 import java.sql.Connection;
@@ -303,7 +307,20 @@ public class JdbcConfiguration {
         DocumentBuilderFactory factory =
         DocumentBuilderFactory.newInstance();
         try {
+            // Harden against XXE: disallow DTDs/external entities, since this
+            // method may parse configuration files from untrusted/shared OPL projects.
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+             factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+
             DocumentBuilder builder = factory.newDocumentBuilder();
+            builder.setEntityResolver((publicId, systemId) ->
+                new InputSource(new StringReader("")));
+
             Document doc = builder.parse(input);
             Element root = doc.getDocumentElement();
             // connection parameters

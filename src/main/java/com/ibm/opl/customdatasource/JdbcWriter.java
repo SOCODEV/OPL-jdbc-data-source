@@ -22,6 +22,8 @@ import java.util.Map;
 import com.ibm.opl.customdatasource.JdbcConfiguration.OutputParameters;
 import com.ibm.opl.customdatasource.sql.NamedParametersPreparedStatement;
 
+import java.io.StringReader;
+
 /**
  * The class to write data using JDBC.
  *
@@ -87,14 +89,26 @@ public class JdbcWriter {
         System.out.println("Done (" + (endTime - startTime)/1000.0 + " s)");
     }
 
+    // Table/column names cannot be bound as JDBC parameters, so they are
+    // validated against this allow-list before being concatenated into SQL.
+    private static final java.util.regex.Pattern SQL_IDENTIFIER_PATTERN =
+        java.util.regex.Pattern.compile("^[A-Za-z_][A-Za-z0-9_]*$");
+
+    static String validateIdentifier(String name) {
+      if (name == null || !SQL_IDENTIFIER_PATTERN.matcher(name).matches()) {
+        throw new IllegalArgumentException("Invalid SQL identifier: " + name);
+      }
+      return name;
+    }
+
     static final String CREATE_QUERY = "CREATE TABLE %(";
 
     String createTableQuery(IloTupleSchema schema, String table) {
-        String query = CREATE_QUERY.replace("%", table);
+        String query = CREATE_QUERY.replace("%", validateIdentifier(table));
         IloOplElementDefinition elementDefinition = _def.getElementDefinition(schema.getName());
         IloOplTupleSchemaDefinition tupleSchema = elementDefinition.asTupleSchema();
         for (int i = 0; i < schema.getSize(); i++) {
-            String columnName = schema.getColumnName(i);
+            String columnName = validateIdentifier(schema.getColumnName(i));
             Type type = tupleSchema.getComponent(i).getElementDefinitionType();
             query += columnName;
             query += " ";
@@ -122,9 +136,9 @@ public class JdbcWriter {
     }
     
     String getInsertQuery(IloTupleSchema schema, String table) {
-      String query = INSERT_QUERY.replace("%", table);
+      String query = INSERT_QUERY.replace("%", validateIdentifier(table));
       for (int i = 0; i < schema.getSize(); i++) {
-          String columnName = schema.getColumnName(i);
+          String columnName = validateIdentifier(schema.getColumnName(i));
           query += columnName;
           if (i < (schema.getSize() - 1))
               query += ", ";
@@ -248,7 +262,7 @@ public class JdbcWriter {
                   exists = rs.next();
                 }
                 if (exists) {
-                  sql = DROP_QUERY.replaceFirst("%", table);
+                  sql = DROP_QUERY.replaceFirst("%", validateIdentifier(table));
                   try (Statement drop = conn.createStatement()) {
                     drop.executeUpdate(sql);
                   }
